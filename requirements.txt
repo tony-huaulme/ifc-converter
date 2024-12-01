@@ -1,0 +1,10 @@
+Flask
+Flask-SQLAlchemy
+Flask-Dance
+psycopg2
+gunicorn
+boto3
+flask-migrate
+flask_cors
+Flask-Limiter
+ifcopenshell
