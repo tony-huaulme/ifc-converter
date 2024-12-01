@@ -1,0 +1,24 @@
+{
+  "name": "ifc_convert",
+  "version": "1.0.0",
+  "description": "\"# ifc-converter\"",
+  "main": "loadModel.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tony-huaulme/ifc-converter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tony-huaulme/ifc-converter/issues"
+  },
+  "homepage": "https://github.com/tony-huaulme/ifc-converter#readme",
+  "dependencies": {
+    "three": "^0.170.0",
+    "three-stdlib": "^2.34.0"
+  }
+}
