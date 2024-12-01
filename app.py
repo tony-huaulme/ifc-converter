@@ -14,17 +14,12 @@ app = Flask(__name__)
 # Configuration
 UPLOAD_FOLDER = 'uploads'
 CONVERTED_FOLDER = 'converted'
-ALLOWED_EXTENSIONS = {'ifc'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['CONVERTED_FOLDER'] = CONVERTED_FOLDER
 
 # Ensure folders exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(CONVERTED_FOLDER, exist_ok=True)
-
-def allowed_file(filename):
-    """Check if the uploaded file is allowed."""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/convert', methods=['POST'])
 def upload_and_convert_file_to_s3():
@@ -42,12 +37,12 @@ def upload_and_convert_file_to_s3():
     try:
         # Save the uploaded file locally
         filename = secure_filename(file.filename)
-        input_path = f'./{filename}'
+        input_path = f'./uploads/{filename}'
         file.save(input_path)
 
         # Convert the file to GLB
         output_filename = f"{os.path.splitext(filename)[0]}.glb"
-        output_path = f'./{output_filename}'
+        output_path = f'./converted/{output_filename}'
 
         # Validate or locate IfcConvert
         if not ifcconvert_path:
@@ -92,20 +87,15 @@ def upload_and_convert_file_to_s3():
         return jsonify({"message": f"Unexpected error: {str(e)}"}), 500
 
 
+@app.route('/found_file_path/<filename>', methods=['GET'])
+def find_file(filename):
+    script_dir = os.getcwd()  # Get the current working directory
+    for root, dirs, files in os.walk(script_dir):
+        print(f"Checking in {root}")
+        if filename in files:
+            return jsonify({"file_path": os.path.join(root, filename)}), 200
+    return jsonify({"message": f"File '{filename}' not found"}), 404
 
-# app route 
-@app.route('/list_files', methods=['GET'])
-def print_directory_contents(path):
-    for root, dirs, files in os.walk(path):
-        print(f"Directory: {root}")
-        for dir_name in dirs:
-            print(f"  Folder: {os.path.join(root, dir_name)}")
-        for file_name in files:
-            print(f"  File: {os.path.join(root, file_name)}")
-
-# Change this to the directory you want to list
-directory_path = "."
-print_directory_contents(directory_path)
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
