@@ -3,6 +3,12 @@ import subprocess
 from flask import Flask, request, send_file, jsonify
 from werkzeug.utils import secure_filename
 
+import os
+import subprocess
+import ifcopenshell
+from werkzeug.utils import secure_filename
+from collections import defaultdict
+
 app = Flask(__name__)
 
 # Configuration
@@ -21,50 +27,65 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/convert', methods=['POST'])
-def convert_file():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part in the request"}), 400
-    
-    file = request.files['file']
-    
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
+def upload_and_convert_file_to_s3():
+    file = request.files.get('file')
 
-    if file and allowed_file(file.filename):
-        # Save the uploaded file
+    if not file:
+        return jsonify({"message": "No file provided"}), 400
+
+    if not file.filename.lower().endswith('.ifc'):
+        print("File type validation failed: Only IFC files are allowed.")
+        return jsonify({"message": "Only IFC files are allowed"}), 400
+
+    try:
+        # Save the uploaded file locally
         filename = secure_filename(file.filename)
-        input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        input_path = f'./{filename}'
         file.save(input_path)
 
-        # Convert the file
+        # Convert the file to GLB
         output_filename = f"{os.path.splitext(filename)[0]}.glb"
-        output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+        output_path = f'./{output_filename}'
 
-        # Execute the IfcConverter command
-        try:
-            result = subprocess.run(
-                [
-                    'IfcConvert',
-                    input_path, 
-                    output_path,
-                    '--use-element-guids', 
-                     '-j', '8'
-                ],
-                capture_output=True, text=True, check=True
-            )
-        except subprocess.CalledProcessError as e:
-            return jsonify({
-                "error": "Conversion failed",
-                "details": e.stderr
-            }), 500
+        # Dynamically locate IfcConvert in the current directory or subdirectories
+        current_dir = os.getcwd()
+        ifcconvert_path = os.path.join(current_dir, 'IfcConvert')
+        if not os.path.exists(ifcconvert_path):
+            raise FileNotFoundError(f"IfcConvert executable not found in {ifcconvert_path}")
 
-        # Send back the converted file
-        if os.path.exists(output_path):
-            return send_file(output_path, as_attachment=True)
-        else:
-            return jsonify({"error": "Converted file not found"}), 500
-    else:
-        return jsonify({"error": "File type not allowed"}), 400
+        subprocess.run(
+            [
+                ifcconvert_path,
+                input_path,
+                output_path
+            ],
+            capture_output=True, text=True, check=True
+        )
+
+        # Extract GUIDs and Descriptions
+        ifc_file = ifcopenshell.open(input_path)
+        description_dict = defaultdict(list)
+        for element in ifc_file.by_type('IfcElement'):
+            guid = element.GlobalId
+            description = getattr(element, 'Description', None)
+            if description:
+                description_dict[description].append(guid)
+
+        # Clean up input file
+        os.remove(input_path)
+
+        # Return the GLB file and extracted data
+        return jsonify({
+            "message": "File converted successfully",
+            "glb_file_path": output_path,
+            "extracted_data": description_dict
+        }), 201
+
+    except subprocess.CalledProcessError as e:
+        return jsonify({"message": "Conversion failed", "details": e.stderr}), 500
+
+    except Exception as e:
+        return jsonify({"message": f"Unexpected error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
